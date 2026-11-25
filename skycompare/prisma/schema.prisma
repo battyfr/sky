@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CabinClass {
+  ECONOMY
+  PREMIUM_ECONOMY
+  BUSINESS
+  FIRST
+}
+
+enum TripType {
+  ROUND_TRIP
+  ONE_WAY
+  MULTI_CITY
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  searches     FlightSearch[]
+  alerts       PriceAlert[]
+  savedFlights SavedFlight[]
+}
+
+model FlightSearch {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tripType      TripType   @default(ROUND_TRIP)
+  origin        String     @db.VarChar(3)
+  destination   String     @db.VarChar(3)
+  departureDate DateTime   @db.Date
+  returnDate    DateTime?  @db.Date
+  /// { adults: number, children: number, infants: number }
+  passengers    Json
+  cabinClass    CabinClass @default(ECONOMY)
+  /// Extra legs for multi-city searches
+  legs          Json?
+  createdAt     DateTime   @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model PriceAlert {
+  id                String      @id @default(cuid())
+  userId            String
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  origin            String      @db.VarChar(3)
+  destination       String      @db.VarChar(3)
+  departureDate     DateTime?   @db.Date
+  returnDate        DateTime?   @db.Date
+  cabinClass        CabinClass  @default(ECONOMY)
+  adults            Int         @default(1)
+  targetPrice       Decimal     @db.Decimal(12, 2)
+  currency          String      @db.VarChar(3)
+  active            Boolean     @default(true)
+  lastCheckedPrice  Decimal?    @db.Decimal(12, 2)
+  lastCheckedAt     DateTime?
+  lastNotifiedAt    DateTime?
+  createdAt         DateTime    @default(now())
+
+  @@index([userId, active])
+  @@index([active, origin, destination])
+}
+
+model SavedFlight {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Stable identifier produced by the flight normalizer
+  flightIdentifier String
+  origin           String   @db.VarChar(3)
+  destination      String   @db.VarChar(3)
+  price            Decimal  @db.Decimal(12, 2)
+  currency         String   @db.VarChar(3)
+  /// Snapshot of the offer at save time (never treated as a live price)
+  snapshot         Json?
+  createdAt        DateTime @default(now())
+
+  @@unique([userId, flightIdentifier])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model PriceHistory {
+  id         String   @id @default(cuid())
+  /// e.g. "DEL-LHR"
+  route      String
+  travelDate DateTime @db.Date
+  provider   String
+  price      Decimal  @db.Decimal(12, 2)
+  /// Currency the provider originally quoted
+  currency   String   @db.VarChar(3)
+  /// True when the row came from demo/sample data
+  isDemo     Boolean  @default(false)
+  recordedAt DateTime @default(now())
+
+  @@index([route, travelDate, recordedAt])
+  @@index([provider])
+}
+
+model NewsletterSubscriber {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
